@@ -1,0 +1,35 @@
+#!/bin/bash -e
+#
+# S2I assemble script for the 's2i-gunicorn-rpmbuild-centos7-epel7' image.
+# The 'assemble' script builds your application source so that it is ready to run.
+#
+# For more information refer to the documentation:
+#	https://github.com/openshift/source-to-image/blob/master/docs/builder_image.md
+#
+
+if [[ "$1" == "-h" ]]; then
+    exec /usr/libexec/s2i/usage
+fi
+
+echo "---> Building application source tarball..."
+( cd /tmp/src && python setup.py sdist )
+
+echo "---> Installing application build requirements..."
+# Hmm probably don't want epel-testing here permanently
+yum-builddep -y --enablerepo=epel-testing /tmp/src/*.spec
+
+echo "---> Building application RPM package..."
+mkdir -p /tmp/rpmbuild
+rpmbuild \
+    --define "_topdir /tmp/rpmbuild" \
+    --define "_sourcedir /tmp/src/dist" \
+    --define "_specdir /tmp/src" \
+    --define "_rpmdir /tmp/rpmbuild" \
+    --define "_srcrpmdir /tmp/rpmbuild" \
+    -bb /tmp/src/*.spec
+
+echo "---> Installing application RPM package..."
+yum -y install --setopt=tsflags=nodocs /tmp/rpmbuild/*/*.rpm
+
+rm -rf /tmp/rpmbuild
+yum -y clean all
